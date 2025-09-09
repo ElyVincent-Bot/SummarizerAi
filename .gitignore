@@ -1,0 +1,8 @@
+.env
+__pycache__/
+audio_cache/
+audio_cache_file_backup/
+.streamlit/secrets.toml
+*.mp4
+*.webm
+

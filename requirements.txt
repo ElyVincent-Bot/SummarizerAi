@@ -1,0 +1,12 @@
+streamlit
+openai>=1.0
+yt-dlp
+openai-whisper
+youtube-transcript-api
+python-dotenv
+torch
+fastapi
+uvicorn[standard]
+whisper
+pydantic
+python-dotenv
