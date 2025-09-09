@@ -1,0 +1,7 @@
+streamlit
+openai>=1.0
+yt-dlp
+openai-whisper
+youtube-transcript-api
+python-dotenv
+torch
