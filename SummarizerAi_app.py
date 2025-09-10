@@ -1,14 +1,15 @@
 import re
+import os
 import streamlit as st
-from youtube_transcript_api import YouTubeTranscriptApi
 import torch
 import whisper
+from youtube_transcript_api import YouTubeTranscriptApi
+from yt_dlp import YoutubeDL
 from openai import OpenAI
-import os
 from dotenv import load_dotenv
 
 # -------------------------
-# Load OpenAI key from environment / Streamlit secrets
+# Load OpenAI key
 # -------------------------
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
@@ -27,7 +28,7 @@ def get_whisper_model(model_name):
     return _model_cache[model_name]
 
 # -------------------------
-# YouTube transcript fetching
+# YouTube transcript
 # -------------------------
 def fetch_transcript(video_id, language="en"):
     try:
@@ -38,62 +39,22 @@ def fetch_transcript(video_id, language="en"):
         print(f"[Transcript API] {e}")
         return None
 
-def summarize_youtube_video(url, model_name=DEFAULT_MODEL):
-    match = re.search(r"v=([a-zA-Z0-9_-]{11})", url)
-    if not match:
-        raise ValueError("Invalid YouTube URL")
-    video_id = match.group(1)
-
-    transcript = fetch_transcript(video_id)
-    if transcript:
-        print("Transcript found on YouTube.")
-    else:
-        print("No transcript found for this video.")
-        transcript = ""
-
-    return transcript
-
 # -------------------------
-# Streamlit App
+# Audio fallback with Whisper
 # -------------------------
-st.title("Summarizer AI - YouTube Video Summarizer")
+def download_audio(url, folder="audio_cache"):
+    os.makedirs(folder, exist_ok=True)
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": os.path.join(folder, "%(id)s.%(ext)s"),
+        "quiet": True,
+        "no_warnings": True,
+    }
+    with YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        return ydl.prepare_filename(info)
 
-# Whisper model selection (optional, for future audio transcription)
-model_option = st.selectbox(
-    "Select Whisper model (smaller=faster, larger=more accurate)",
-    ["tiny", "base", "small", "medium", "large"],
-    index=2
-)
-
-# Input URLs (one per line)
-youtube_urls = st.text_area(
-    "Paste YouTube URLs here (one per line):",
-    placeholder="https://www.youtube.com/watch?v=example1\nhttps://www.youtube.com/watch?v=example2"
-)
-
-if st.button("Summarize"):
-    if not youtube_urls.strip():
-        st.warning("Please enter at least one YouTube URL.")
-    else:
-        urls = [url.strip() for url in youtube_urls.split("\n") if url.strip()]
-        for url in urls:
-            st.info(f"Processing: {url}")
-            try:
-                transcript_text = summarize_youtube_video(url, model_name=model_option)
-
-                if not transcript_text:
-                    st.warning(f"No transcript available for {url}. Skipping.")
-                    continue
-
-                # Summarize using OpenAI
-                prompt = f"Summarize this text concisely:\n\n{transcript_text}"
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                summary = response.choices[0].message.content
-                st.success("Summary ready!")
-                st.write(summary)
-
-            except Exception as e:
-                st.error(f"Error processing {url}: {e}")
+def transcribe_audio(file_path, model_override=None):
+    model_name = model_override or DEFAULT_MODEL
+    m = get_whisper_model(model_name)
+    result = m.transcribe(file_path)
