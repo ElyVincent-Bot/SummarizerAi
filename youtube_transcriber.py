@@ -2,7 +2,6 @@ import os
 import re
 import torch
 import whisper
-from yt_dlp import YoutubeDL
 from youtube_transcript_api import YouTubeTranscriptApi
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -14,7 +13,13 @@ def get_whisper_model(model_name):
         _model_cache[model_name] = whisper.load_model(model_name, device=DEVICE)
     return _model_cache[model_name]
 
+# -------------------------
+# Transcript fetching
+# -------------------------
 def fetch_transcript(video_id, language="en"):
+    """
+    Fetch transcript from YouTubeTranscriptApi. Returns text or None.
+    """
     try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
         transcript = transcript_list.find_transcript([language]).fetch()
@@ -23,7 +28,15 @@ def fetch_transcript(video_id, language="en"):
         print(f"[Transcript API] {e}")
         return None
 
+# -------------------------
+# Audio fallback (optional)
+# -------------------------
 def download_audio(url, folder="audio_cache"):
+    """
+    Fallback to download audio only if transcript is missing.
+    """
+    from yt_dlp import YoutubeDL
+
     os.makedirs(folder, exist_ok=True)
     ydl_opts = {
         "format": "bestaudio/best",
@@ -41,18 +54,14 @@ def transcribe_audio(file_path, model_override=None):
     result = m.transcribe(file_path)
     return result["text"]
 
+# -------------------------
+# Main summarization function
+# -------------------------
 def summarize_youtube_video(url, model_name=DEFAULT_MODEL):
+    """
+    Returns transcript text for a YouTube video.
+    Uses transcript API first, then falls back to audio transcription.
+    """
+    # Extract video ID
     match = re.search(r"v=([a-zA-Z0-9_-]{11})", url)
     if not match:
-        raise ValueError("Invalid YouTube URL")
-    video_id = match.group(1)
-
-    transcript = fetch_transcript(video_id)
-    if transcript:
-        print("Transcript found on YouTube.")
-    else:
-        print("No transcript found. Downloading audio + transcribing...")
-        audio_file = download_audio(url)
-        transcript = transcribe_audio(audio_file, model_override=model_name)
-
-    return transcript
